@@ -1,10 +1,13 @@
-﻿namespace ShowAndCastApi.Models
+﻿using System.ComponentModel.DataAnnotations.Schema;
+
+namespace ShowAndCastApi.Models
 {
     public class Cast
     {
         public long Id { get; set; }
+
         public long ShowId { get; set; }
-        public string? Name { get; set; }
-        public DateTime Birthday { get; set; }
+
+        public long PersonId { get; set; }
     }
 }

@@ -12,6 +12,11 @@ builder.Services.AddDbContext<ShowContext>(opt =>
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddHttpClient("tvmaze", client =>
+{
+    client.BaseAddress = new Uri("https://api.tvmaze.com/");
+    client.DefaultRequestHeaders.Add("User-Agent", "ShowAndCastApi-AF-Sample");
+});
 builder.Services.AddHostedService<SyncBackgroundService>();
 
 var app = builder.Build();

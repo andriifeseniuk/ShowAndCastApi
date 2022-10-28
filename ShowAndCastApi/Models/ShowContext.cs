@@ -10,6 +10,9 @@ namespace ShowAndCastApi.Models
         }
 
         public DbSet<Show> Shows { get; set; }
+
+        public DbSet<Person> Persons { get; set; }
+
         public DbSet<Cast> Casts { get; set; }
     }
 }
