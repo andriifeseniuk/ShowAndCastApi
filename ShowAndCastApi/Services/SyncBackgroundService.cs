@@ -7,12 +7,18 @@ namespace ShowAndCastApi.Services
     {
         private readonly IServiceScopeFactory scopeFactory;
         private readonly IHttpClientFactory clientFactory;
+        private readonly SyncSettings settings;
         private readonly ILogger logger;
 
-        public SyncBackgroundService(IServiceScopeFactory scopeFactory, IHttpClientFactory clientFactory, ILogger<SyncBackgroundService> logger)
+        public SyncBackgroundService(
+            IServiceScopeFactory scopeFactory,
+            IHttpClientFactory clientFactory,
+            SyncSettings settings,
+            ILogger<SyncBackgroundService> logger)
         {
             this.scopeFactory = scopeFactory;
             this.clientFactory = clientFactory;
+            this.settings = settings;
             this.logger = logger;
         }
 
@@ -46,11 +52,11 @@ namespace ShowAndCastApi.Services
                     }
                     else
                     {
-                        var nextPage = maxShowId / 250 + 1;
+                        var nextPage = maxShowId / this.settings.ShowsPageSize + 1;
                         await LoadShowsPage(context, nextPage);
                     }
 
-                    await Task.Delay(1000, stoppingToken);
+                    await Task.Delay(this.settings.RequestDelay, stoppingToken);
                 }
                 catch (Exception e)
                 {

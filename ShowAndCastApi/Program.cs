@@ -8,7 +8,6 @@ builder.Host.ConfigureLogging(logging =>
     logging.ClearProviders();
     logging.AddConsole();
 });
-// Add services to the container.
 
 builder.Services.AddControllers();
 builder.Services.AddDbContext<ShowContext>(opt =>
@@ -21,6 +20,7 @@ builder.Services.AddHttpClient("tvmaze", client =>
     client.BaseAddress = new Uri("https://api.tvmaze.com/");
     client.DefaultRequestHeaders.Add("User-Agent", "ShowAndCastApi-AF-Sample");
 });
+builder.Services.AddSingleton<SyncSettings>(builder.Configuration.GetSection("SyncSettings").Get<SyncSettings>());
 builder.Services.AddHostedService<SyncBackgroundService>();
 
 var app = builder.Build();
