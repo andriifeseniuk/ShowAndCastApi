@@ -3,7 +3,11 @@ using ShowAndCastApi.Models;
 using ShowAndCastApi.Services;
 
 var builder = WebApplication.CreateBuilder(args);
-
+builder.Host.ConfigureLogging(logging =>
+{
+    logging.ClearProviders();
+    logging.AddConsole();
+});
 // Add services to the container.
 
 builder.Services.AddControllers();

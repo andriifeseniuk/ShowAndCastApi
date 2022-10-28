@@ -7,11 +7,13 @@ namespace ShowAndCastApi.Services
     {
         private readonly IServiceScopeFactory scopeFactory;
         private readonly IHttpClientFactory clientFactory;
+        private readonly ILogger logger;
 
-        public SyncBackgroundService(IServiceScopeFactory scopeFactory, IHttpClientFactory clientFactory)
+        public SyncBackgroundService(IServiceScopeFactory scopeFactory, IHttpClientFactory clientFactory, ILogger<SyncBackgroundService> logger)
         {
             this.scopeFactory = scopeFactory;
             this.clientFactory = clientFactory;
+            this.logger = logger;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -22,33 +24,44 @@ namespace ShowAndCastApi.Services
                 {
                     using var scope = this.scopeFactory.CreateScope();
                     var context = scope.ServiceProvider.GetRequiredService<ShowContext>();
-                    var maxShowId = context.Shows.Max(c => (long?)c.Id) ?? 0;
-                    var maxCastShowId = context.Casts.Max(c => (long?)c.ShowId) ?? 0;
-                    if (maxCastShowId < 10000)
+                    if (!context.Shows.Any())
                     {
-                        if (maxCastShowId < maxShowId)
-                        {
-                            await LoadCastsForShow(maxCastShowId, context);
-                        }
-                        else
-                        {
-                            await LoadNextShowsPage(maxShowId, context);
-                        }
+                        await this.LoadShowsPage(context, 0);
+                        continue;
+                    }
+
+                    if (!context.Casts.Any())
+                    {
+                        var minShowId = context.Shows.Min(s => s.Id);
+                        await this.LoadCastsForShow(context, minShowId);
+                        continue;
+                    }
+
+                    var maxShowId = context.Shows.Max(c => c.Id);
+                    var maxShowIdWithCast = context.Casts.Max(c => c.ShowId);
+                    if (maxShowIdWithCast < maxShowId)
+                    {
+                        var minShowIdWithoutCast = context.Shows.Where(s => s.Id > maxShowIdWithCast).Min(s => s.Id);
+                        await LoadCastsForShow(context, minShowIdWithoutCast);
+                    }
+                    else
+                    {
+                        var nextPage = maxShowId / 250 + 1;
+                        await LoadShowsPage(context, nextPage);
                     }
 
                     await Task.Delay(1000, stoppingToken);
                 }
                 catch (Exception e)
                 {
-                    // todo
+                    this.logger.LogError("Error occurred in SyncBackgroundService", e);
                 }
             }
         }
 
-        private async Task LoadCastsForShow(long maxCastShowId, ShowContext context)
+        private async Task LoadCastsForShow(ShowContext context, long showId)
         {
-            var nextShowId = maxCastShowId + 1;
-            var request = new HttpRequestMessage(HttpMethod.Get, $"shows/{nextShowId}/cast");
+            var request = new HttpRequestMessage(HttpMethod.Get, $"shows/{showId}/cast");
             var client = this.clientFactory.CreateClient("tvmaze");
             var response = await client.SendAsync(request);
             if (response.IsSuccessStatusCode)
@@ -66,10 +79,11 @@ namespace ShowAndCastApi.Services
                 var castsToAdd = castDtos.Select(c => new Cast
                 {
                     PersonId = c.Person.Id,
-                    ShowId = nextShowId
+                    ShowId = showId
                 }).ToList();
                 await context.Casts.AddRangeAsync(castsToAdd);
                 await context.SaveChangesAsync();
+                this.logger.LogInformation("Loaded {0} Casts for Show {1}", castsToAdd.Count, showId);
             }
             else
             {
@@ -77,21 +91,22 @@ namespace ShowAndCastApi.Services
             }
         }
 
-        private async Task LoadNextShowsPage(long maxShowId, ShowContext context)
+        private async Task LoadShowsPage(ShowContext context, long page)
         {
-            var page = (maxShowId + 1) / 250;
             var request = new HttpRequestMessage(HttpMethod.Get, $"shows?page={page}");
             var client = this.clientFactory.CreateClient("tvmaze");
             var response = await client.SendAsync(request);
             if (response.IsSuccessStatusCode)
             {
-                var newShows = await response.Content.ReadAsAsync<IEnumerable<Show>>();
+                var loadedShows = await response.Content.ReadAsAsync<IEnumerable<Show>>();
+                var newShows = loadedShows.ToList();
                 await context.Shows.AddRangeAsync(newShows);
                 await context.SaveChangesAsync();
+                this.logger.LogInformation("Loaded {0} Shows from page {1}", newShows.Count, page);
             }
             else
             {
-                // todo
+                // todo 404
             }
         }
     }
