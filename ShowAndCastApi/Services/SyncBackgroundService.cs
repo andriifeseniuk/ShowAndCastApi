@@ -1,4 +1,5 @@
-﻿using ShowAndCastApi.DTO;
+﻿using System.Net;
+using ShowAndCastApi.DTO;
 using ShowAndCastApi.Models;
 
 namespace ShowAndCastApi.Services
@@ -10,6 +11,10 @@ namespace ShowAndCastApi.Services
         private readonly SyncSettings settings;
         private readonly ILogger logger;
 
+        private int throttlingInterval;
+        private bool syncCompleted;
+        private DateTime throttlingChangedTime;
+
         public SyncBackgroundService(
             IServiceScopeFactory scopeFactory,
             IHttpClientFactory clientFactory,
@@ -20,6 +25,9 @@ namespace ShowAndCastApi.Services
             this.clientFactory = clientFactory;
             this.settings = settings;
             this.logger = logger;
+
+            this.throttlingInterval = this.settings.MinThrottlingInterval;
+            this.throttlingChangedTime = DateTime.MaxValue;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -28,6 +36,8 @@ namespace ShowAndCastApi.Services
             {
                 try
                 {
+                    await Task.Delay(this.throttlingInterval, stoppingToken);
+
                     using var scope = this.scopeFactory.CreateScope();
                     var context = scope.ServiceProvider.GetRequiredService<ShowContext>();
                     if (!context.Shows.Any())
@@ -56,7 +66,16 @@ namespace ShowAndCastApi.Services
                         await LoadShowsPage(context, nextPage);
                     }
 
-                    await Task.Delay(this.settings.RequestDelay, stoppingToken);
+                    if (DateTime.UtcNow - this.throttlingChangedTime > TimeSpan.FromMilliseconds(this.settings.ThrottlingRecalculateInterval))
+                    {
+                        this.DecreaseThrottlingInterval();
+                    }
+
+                    if (this.syncCompleted)
+                    {
+                        this.syncCompleted = false;
+                        await Task.Delay(this.settings.SyncCompletedInterval, stoppingToken);
+                    }
                 }
                 catch (Exception e)
                 {
@@ -93,7 +112,16 @@ namespace ShowAndCastApi.Services
             }
             else
             {
-                // todo
+                switch (response.StatusCode)
+                {
+                    case HttpStatusCode.TooManyRequests:
+                        this.IncreaseThrottlingInterval();
+                        this.logger.LogWarning("Too Many Requests when loading casts for show {0}", showId);
+                        break;
+                    default:
+                        this.logger.LogWarning("{0} when loading loading casts for show {1}", response.StatusCode, showId);
+                        break;
+                }
             }
         }
 
@@ -112,8 +140,41 @@ namespace ShowAndCastApi.Services
             }
             else
             {
-                // todo 404
+                switch (response.StatusCode)
+                {
+                    case HttpStatusCode.NotFound:
+                        this.syncCompleted = true;
+                        this.logger.LogInformation("Sync completed");
+                        break;
+                    case HttpStatusCode.TooManyRequests:
+                        this.IncreaseThrottlingInterval();
+                        this.logger.LogWarning("Too Many Requests when loading shows page {0}", page);
+                        break;
+                    default:
+                        this.logger.LogWarning("{0} when loading shows page {1}", response.StatusCode, page);
+                        break;
+                }
             }
+        }
+
+        private void DecreaseThrottlingInterval()
+        {
+            var decreasedInterval = this.throttlingInterval / 2;
+            this.throttlingInterval = decreasedInterval > this.settings.MaxThrottlingInterval 
+                ? this.settings.MaxThrottlingInterval
+                : decreasedInterval < this.settings.MinThrottlingInterval 
+                    ? this.settings.MinThrottlingInterval
+                    : decreasedInterval;
+        }
+
+        private void IncreaseThrottlingInterval()
+        {
+            var decreasedInterval = this.throttlingInterval * 2;
+            this.throttlingInterval = decreasedInterval > this.settings.MaxThrottlingInterval 
+                ? this.settings.MaxThrottlingInterval
+                : decreasedInterval < this.settings.MinThrottlingInterval 
+                    ? this.settings.MinThrottlingInterval
+                    : decreasedInterval;
         }
     }
 }
