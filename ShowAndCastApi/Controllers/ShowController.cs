@@ -21,7 +21,7 @@ namespace ShowAndCastApi.Controllers
         [HttpGet]
         public async Task<IEnumerable<Show>> Get(int page = 0, int pageSize = 20)
         {
-            var skipCount = page > 0 ? (page - 1) * pageSize : 0;
+            var skipCount = page * pageSize;
             return await this.context.Shows
                 .Include(s => s.Casts.OrderByDescending(c => c.Person.Birthday))
                 .ThenInclude(c => c.Person)
