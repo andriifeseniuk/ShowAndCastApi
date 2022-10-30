@@ -14,5 +14,7 @@ namespace ShowAndCastApi.Models
         public DbSet<Person> Persons { get; set; }
 
         public DbSet<Cast> Casts { get; set; }
+
+        public DbSet<ShowSync> ShowSyncs { get; set; }
     }
 }

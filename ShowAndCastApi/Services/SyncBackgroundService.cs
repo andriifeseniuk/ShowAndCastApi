@@ -1,4 +1,5 @@
 ﻿using System.Net;
+using Microsoft.EntityFrameworkCore;
 using ShowAndCastApi.DTO;
 using ShowAndCastApi.Models;
 
@@ -12,7 +13,6 @@ namespace ShowAndCastApi.Services
         private readonly ILogger logger;
 
         private int throttlingInterval;
-        private bool syncCompleted;
         private DateTime throttlingChangedTime;
 
         public SyncBackgroundService(
@@ -40,6 +40,21 @@ namespace ShowAndCastApi.Services
 
                     using var scope = this.scopeFactory.CreateScope();
                     var context = scope.ServiceProvider.GetRequiredService<ShowContext>();
+                    if (!await context.ShowSyncs.AnyAsync())
+                    {
+                        await context.ShowSyncs.AddAsync(new ShowSync {IsSyncCompleted = false, LastLoadedShowId = -1});
+                        await context.SaveChangesAsync();
+                    }
+
+                    var sync = await context.ShowSyncs.FirstAsync();
+                    if (sync.IsSyncCompleted)
+                    {
+                        await Task.Delay(this.settings.SyncCompletedInterval, stoppingToken);
+                        sync.IsSyncCompleted = false;
+                        await context.SaveChangesAsync();
+                        continue;
+                    }
+
                     if (!context.Shows.Any())
                     {
                         await this.LoadShowsPage(context, 0);
@@ -48,20 +63,20 @@ namespace ShowAndCastApi.Services
 
                     if (!context.Casts.Any())
                     {
-                        var minShowId = context.Shows.Min(s => s.Id);
+                        var minShowId = await context.Shows.MinAsync(s => s.Id);
                         await this.LoadCastsForShow(context, minShowId);
                         continue;
                     }
 
-                    var maxShowId = context.Shows.Max(c => c.Id);
-                    var maxShowIdWithCast = context.Casts.Max(c => c.ShowId);
-                    if (maxShowIdWithCast < maxShowId)
+                    var showsToLoad = context.Shows.Where(s => s.Id > sync.LastLoadedShowId);
+                    if (await showsToLoad.AnyAsync())
                     {
-                        var minShowIdWithoutCast = context.Shows.Where(s => s.Id > maxShowIdWithCast).Min(s => s.Id);
-                        await LoadCastsForShow(context, minShowIdWithoutCast);
+                        var showIdToLoad = await showsToLoad.MinAsync(s => s.Id);
+                        await LoadCastsForShow(context, showIdToLoad);
                     }
                     else
                     {
+                        var maxShowId = await context.Shows.MaxAsync(s => s.Id);
                         var nextPage = maxShowId / this.settings.ShowsPageSize + 1;
                         await LoadShowsPage(context, nextPage);
                     }
@@ -69,12 +84,6 @@ namespace ShowAndCastApi.Services
                     if (DateTime.UtcNow - this.throttlingChangedTime > TimeSpan.FromMilliseconds(this.settings.ThrottlingRecalculateInterval))
                     {
                         this.DecreaseThrottlingInterval();
-                    }
-
-                    if (this.syncCompleted)
-                    {
-                        this.syncCompleted = false;
-                        await Task.Delay(this.settings.SyncCompletedInterval, stoppingToken);
                     }
                 }
                 catch (Exception e)
@@ -93,11 +102,12 @@ namespace ShowAndCastApi.Services
             {
                 var castDtos = await response.Content.ReadAsAsync<IEnumerable<CastDto>>();
                 var personsToAdd = castDtos.Select(c => new Person
-                {
-                    Id = c.Person.Id,
-                    Name = c.Person.Name,
-                    Birthday = Convert.ToDateTime(c.Person.Birthday),
-                }).DistinctBy(p => p.Id);
+                    {
+                        Id = c.Person.Id,
+                        Name = c.Person.Name,
+                        Birthday = Convert.ToDateTime(c.Person.Birthday),
+                    })
+                    .DistinctBy(p => p.Id);
                 var newPersons = personsToAdd.Where(newP => !context.Persons.Any(p => p.Id == newP.Id));
                 await context.Persons.AddRangeAsync(newPersons);
 
@@ -107,6 +117,8 @@ namespace ShowAndCastApi.Services
                     ShowId = showId
                 }).ToList();
                 await context.Casts.AddRangeAsync(castsToAdd);
+                var sync = await context.ShowSyncs.FirstAsync();
+                sync.LastLoadedShowId = showId;
                 await context.SaveChangesAsync();
                 this.logger.LogInformation("Loaded {0} Casts for Show {1}", castsToAdd.Count, showId);
             }
@@ -143,7 +155,9 @@ namespace ShowAndCastApi.Services
                 switch (response.StatusCode)
                 {
                     case HttpStatusCode.NotFound:
-                        this.syncCompleted = true;
+                        var sync = await context.ShowSyncs.FirstAsync();
+                        sync.IsSyncCompleted = true;
+                        await context.SaveChangesAsync();
                         this.logger.LogInformation("Sync completed");
                         break;
                     case HttpStatusCode.TooManyRequests:
