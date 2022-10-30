@@ -10,9 +10,17 @@ builder.Host.ConfigureLogging(logging =>
 });
 
 builder.Services.AddControllers();
-builder.Services.AddDbContext<ShowContext>(opt =>
-    opt.UseInMemoryDatabase("ShowAndCast"));
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+
+if(builder.Environment.IsDevelopment())
+{
+    builder.Services.AddDbContext<ShowContext>(opt => opt.UseInMemoryDatabase("ShowAndCast"));
+}
+else
+{
+    // tode implement real DB
+    builder.Services.AddDbContext<ShowContext>(opt => opt.UseInMemoryDatabase("ShowAndCast"));
+}
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddHttpClient("tvmaze", client =>
@@ -25,7 +33,6 @@ builder.Services.AddHostedService<SyncBackgroundService>();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
