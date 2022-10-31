@@ -28,6 +28,7 @@ builder.Services.AddHttpClient("tvmaze", client =>
     client.BaseAddress = new Uri("https://api.tvmaze.com/");
     client.DefaultRequestHeaders.Add("User-Agent", "ShowAndCastApi-AF-Sample");
 });
+builder.Services.AddScoped<ShowAndCastService>();
 builder.Services.AddSingleton<SyncSettings>(builder.Configuration.GetSection("SyncSettings").Get<SyncSettings>());
 builder.Services.AddHostedService<SyncBackgroundService>();
 

@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using ShowAndCastApi.DTO;
 using ShowAndCastApi.Models;
+using ShowAndCastApi.Services;
 
 namespace ShowAndCastApi.Controllers
 {
@@ -9,38 +10,18 @@ namespace ShowAndCastApi.Controllers
     [ApiController]
     public class ShowController : ControllerBase
     {
-        private readonly ShowContext context;
+        private readonly ShowAndCastService showService;
 
-        public ShowController(ShowContext context)
+        public ShowController(ShowAndCastService showService)
         {
-            this.context = context;
+            this.showService = showService;
         }
 
         // GET: api/<ShowController>
         [HttpGet]
         public async Task<ActionResult<IList<ShowDto>>> Get(int page = 0, int pageSize = 20)
         {
-            var skipCount = page * pageSize;
-            var shows = await this.context.Shows
-                .Include(s => s.Casts)
-                .ThenInclude(c => c.Person)
-                .Skip(skipCount)
-                .Take(pageSize)
-                .Select(s => new ShowDto
-                {
-                    Id = s.Id,
-                    Name = s.Name,
-                    Cast = s.Casts.Select(c => new PersonDto
-                        {
-                            Id = c.Id,
-                            Name = c.Person.Name,
-                            Birthday = c.Person.Birthday.ToString("yyyy-MM-dd")
-                        })
-                        .OrderByDescending(c => c.Birthday)
-                        .ToList()
-                })
-                .ToListAsync();
-
+            var shows =  await this.showService.GetShows(page, pageSize);
             if (!shows.Any())
             {
                 return NotFound();
