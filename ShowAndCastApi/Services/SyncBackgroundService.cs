@@ -1,5 +1,16 @@
-﻿using System.Net;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Internal;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 using ShowAndCastApi.DTO;
 using ShowAndCastApi.Models;
 
@@ -100,14 +111,16 @@ namespace ShowAndCastApi.Services
             var response = await client.SendAsync(request);
             if (response.IsSuccessStatusCode)
             {
-                var castDtos = await response.Content.ReadAsAsync<IEnumerable<CastDto>>();
+                var castDtos = JsonConvert.DeserializeObject<IEnumerable<CastDto>>(await response.Content.ReadAsStringAsync());
                 var personsToAdd = castDtos.Select(c => new Person
                     {
                         Id = c.Person.Id,
                         Name = c.Person.Name,
                         Birthday = Convert.ToDateTime(c.Person.Birthday),
                     })
-                    .DistinctBy(p => p.Id);
+                    .GroupBy(p => p.Id)
+                    .Select(g => g.First())
+                    .ToList();
                 var newPersons = personsToAdd.Where(newP => !context.Persons.Any(p => p.Id == newP.Id));
                 await context.Persons.AddRangeAsync(newPersons);
 
@@ -144,7 +157,7 @@ namespace ShowAndCastApi.Services
             var response = await client.SendAsync(request);
             if (response.IsSuccessStatusCode)
             {
-                var loadedShows = await response.Content.ReadAsAsync<IEnumerable<Show>>();
+                var loadedShows = JsonConvert.DeserializeObject<IEnumerable<Show>>(await response.Content.ReadAsStringAsync());
                 var newShows = loadedShows.ToList();
                 await context.Shows.AddRangeAsync(newShows);
                 await context.SaveChangesAsync();

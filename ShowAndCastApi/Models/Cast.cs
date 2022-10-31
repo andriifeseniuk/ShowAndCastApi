@@ -1,6 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations.Schema;
-
-namespace ShowAndCastApi.Models
+﻿namespace ShowAndCastApi.Models
 {
     public class Cast
     {

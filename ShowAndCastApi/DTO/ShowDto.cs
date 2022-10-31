@@ -1,4 +1,6 @@
-﻿namespace ShowAndCastApi.DTO
+﻿using System.Collections.Generic;
+
+namespace ShowAndCastApi.DTO
 {
     public class ShowDto
     {
