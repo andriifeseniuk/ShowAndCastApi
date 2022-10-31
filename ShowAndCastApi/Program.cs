@@ -17,7 +17,7 @@ if(builder.Environment.IsDevelopment())
 }
 else
 {
-    // tode implement real DB
+    // todo implement real DB
     builder.Services.AddDbContext<ShowContext>(opt => opt.UseInMemoryDatabase("ShowAndCast"));
 }
 
