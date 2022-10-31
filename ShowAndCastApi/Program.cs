@@ -6,7 +6,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Host.ConfigureLogging(logging =>
 {
     logging.ClearProviders();
-    logging.AddConsole();
+    logging.AddSimpleConsole(c => c.TimestampFormat = "HH:mm:ss.fff ");
 });
 
 builder.Services.AddControllers();
