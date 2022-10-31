@@ -3,8 +3,6 @@ using Microsoft.EntityFrameworkCore;
 using ShowAndCastApi.DTO;
 using ShowAndCastApi.Models;
 
-// For more information on enabling Web API for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
-
 namespace ShowAndCastApi.Controllers
 {
     [Route("api/[controller]")]
@@ -20,10 +18,10 @@ namespace ShowAndCastApi.Controllers
 
         // GET: api/<ShowController>
         [HttpGet]
-        public async Task<IEnumerable<ShowDto>> Get(int page = 0, int pageSize = 20)
+        public async Task<ActionResult<IList<ShowDto>>> Get(int page = 0, int pageSize = 20)
         {
             var skipCount = page * pageSize;
-            return await this.context.Shows
+            var shows = await this.context.Shows
                 .Include(s => s.Casts)
                 .ThenInclude(c => c.Person)
                 .Skip(skipCount)
@@ -42,6 +40,13 @@ namespace ShowAndCastApi.Controllers
                         .ToList()
                 })
                 .ToListAsync();
+
+            if (!shows.Any())
+            {
+                return NotFound();
+            }
+
+            return shows;
         }
     }
 }
